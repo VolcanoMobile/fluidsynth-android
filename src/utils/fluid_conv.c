@@ -23,66 +23,56 @@
 #include "fluid_conv_tables.c"
 
 /*
- * fluid_ct2hz
+ * Converts absolute cents to Hertz
+ * 
+ * As per sfspec section 9.3:
+ * 
+ * ABSOLUTE CENTS - An absolute logarithmic measure of frequency based on a
+ * reference of MIDI key number scaled by 100.
+ * A cent is 1/1200 of an octave [which is the twelve hundredth root of two],
+ * and value 6900 is 440 Hz (A-440).
+ * 
+ * Implemented below basically is the following:
+ *   440 * 2^((cents-6900)/1200)
+ * = 440 * 2^((int)((cents-6900)/1200)) * 2^(((int)cents-6900)%1200))
+ * = 2^((int)((cents-6900)/1200)) * (440 * 2^(((int)cents-6900)%1200)))
+ *                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ *                           This second factor is stored in the lookup table.
+ *
+ * The first factor can be implemented with a fast shift when the exponent
+ * is always an int. This is the case when using 440/2^6 Hz rather than 440Hz
+ * reference.
  */
 fluid_real_t
 fluid_ct2hz_real(fluid_real_t cents)
 {
-    if(cents < 0)
+    if(FLUID_UNLIKELY(cents < 0))
     {
         return (fluid_real_t) 1.0;
     }
-    else if(cents < 900)
-    {
-        return (fluid_real_t) 6.875 * fluid_ct2hz_tab[(int)(cents + 300)];
-    }
-    else if(cents < 2100)
-    {
-        return (fluid_real_t) 13.75 * fluid_ct2hz_tab[(int)(cents - 900)];
-    }
-    else if(cents < 3300)
-    {
-        return (fluid_real_t) 27.5 * fluid_ct2hz_tab[(int)(cents - 2100)];
-    }
-    else if(cents < 4500)
-    {
-        return (fluid_real_t) 55.0 * fluid_ct2hz_tab[(int)(cents - 3300)];
-    }
-    else if(cents < 5700)
-    {
-        return (fluid_real_t) 110.0 * fluid_ct2hz_tab[(int)(cents - 4500)];
-    }
-    else if(cents < 6900)
-    {
-        return (fluid_real_t) 220.0 * fluid_ct2hz_tab[(int)(cents - 5700)];
-    }
-    else if(cents < 8100)
-    {
-        return (fluid_real_t) 440.0 * fluid_ct2hz_tab[(int)(cents - 6900)];
-    }
-    else if(cents < 9300)
-    {
-        return (fluid_real_t) 880.0 * fluid_ct2hz_tab[(int)(cents - 8100)];
-    }
-    else if(cents < 10500)
-    {
-        return (fluid_real_t) 1760.0 * fluid_ct2hz_tab[(int)(cents - 9300)];
-    }
-    else if(cents < 11700)
-    {
-        return (fluid_real_t) 3520.0 * fluid_ct2hz_tab[(int)(cents - 10500)];
-    }
-    else if(cents < 12900)
-    {
-        return (fluid_real_t) 7040.0 * fluid_ct2hz_tab[(int)(cents - 11700)];
-    }
-    else if(cents < 14100)
-    {
-        return (fluid_real_t) 14080.0 * fluid_ct2hz_tab[(int)(cents - 12900)];
-    }
     else
     {
-        return (fluid_real_t) 1.0; /* some loony trying to make you deaf */
+        unsigned int mult, fac, rem;
+        unsigned int icents = (unsigned int)cents;
+        icents += 300u;
+
+        // don't use stdlib div() here, it turned out have poor performance
+        fac = icents / 1200u;
+        rem = icents % 1200u;
+
+        // Think of "mult" as the factor that we multiply (440/2^6)Hz with,
+        // or in other words mult is the "first factor" of the above
+        // functions comment.
+        //
+        // Assuming sizeof(uint)==4 this will give us a maximum range of
+        // 32 * 1200cents - 300cents == 38100 cents == 29,527,900,160 Hz
+        // which is much more than ever needed. For bigger values, just
+        // safely wrap around (the & is just a replacement for the quick
+        // modulo operation % 32).
+        mult = 1u << (fac & (sizeof(mult)*8u - 1u));
+
+        // don't use ldexp() either (poor performance)
+        return mult * fluid_ct2hz_tab[rem];
     }
 }
 
@@ -150,7 +140,7 @@ fluid_tc2sec_delay(fluid_real_t tc)
         return (fluid_real_t) 0.0f;
     };
 
-    if(tc < -12000.)
+    if(tc < -12000.f)
     {
         tc = (fluid_real_t) -12000.0f;
     }
@@ -160,7 +150,7 @@ fluid_tc2sec_delay(fluid_real_t tc)
         tc = (fluid_real_t) 5000.0f;
     }
 
-    return (fluid_real_t) pow(2.0, (double) tc / 1200.0);
+    return FLUID_POW(2.f, tc / 1200.f);
 }
 
 /*
@@ -173,22 +163,22 @@ fluid_tc2sec_attack(fluid_real_t tc)
      * SF2.01 section 8.1.3 items 26, 34
      * The most negative number indicates a delay of 0
      * Range is limited from -12000 to 8000 */
-    if(tc <= -32768.)
+    if(tc <= -32768.f)
     {
-        return (fluid_real_t) 0.0;
+        return (fluid_real_t) 0.f;
     };
 
-    if(tc < -12000.)
+    if(tc < -12000.f)
     {
-        tc = (fluid_real_t) -12000.0;
+        tc = (fluid_real_t) -12000.f;
     };
 
-    if(tc > 8000.)
+    if(tc > 8000.f)
     {
-        tc = (fluid_real_t) 8000.0;
+        tc = (fluid_real_t) 8000.f;
     };
 
-    return (fluid_real_t) pow(2.0, (double) tc / 1200.0);
+    return FLUID_POW(2.f, tc / 1200.f);
 }
 
 /*
@@ -198,7 +188,7 @@ fluid_real_t
 fluid_tc2sec(fluid_real_t tc)
 {
     /* No range checking here! */
-    return (fluid_real_t) pow(2.0, (double) tc / 1200.0);
+    return FLUID_POW(2.f, tc / 1200.f);
 }
 
 /*
@@ -211,22 +201,22 @@ fluid_tc2sec_release(fluid_real_t tc)
      * SF2.01 section 8.1.3 items 30, 38
      * No 'most negative number' rule here!
      * Range is limited from -12000 to 8000 */
-    if(tc <= -32768.)
+    if(tc <= -32768.f)
     {
-        return (fluid_real_t) 0.0;
+        return (fluid_real_t) 0.f;
     };
 
-    if(tc < -12000.)
+    if(tc < -12000.f)
     {
-        tc = (fluid_real_t) -12000.0;
+        tc = (fluid_real_t) -12000.f;
     };
 
-    if(tc > 8000.)
+    if(tc > 8000.f)
     {
-        tc = (fluid_real_t) 8000.0;
+        tc = (fluid_real_t) 8000.f;
     };
 
-    return (fluid_real_t) pow(2.0, (double) tc / 1200.0);
+    return FLUID_POW(2.f, tc / 1200.f);
 }
 
 /*
@@ -238,13 +228,13 @@ fluid_tc2sec_release(fluid_real_t tc)
  *
 fluid_hz2ct(fluid_real_t f)
 {
-    return (fluid_real_t)(6900 + (1200 / M_LN2) * log(f / 440.0));
+    return 6900.f + (1200.f / FLUID_M_LN2) * FLUID_LOGF(f / 440.0f));
 }
  */
 fluid_real_t
 fluid_act2hz(fluid_real_t c)
 {
-    return (fluid_real_t)(8.176 * pow(2.0, (double) c / 1200.0));
+    return 8.176f * FLUID_POW(2.f, c / 1200.f);
 }
 
 /*
@@ -258,17 +248,17 @@ fluid_pan(fluid_real_t c, int left)
         c = -c;
     }
 
-    if(c <= -500)
+    if(c <= -500.f)
     {
-        return (fluid_real_t) 0.0;
+        return (fluid_real_t) 0.f;
     }
-    else if(c >= 500)
+    else if(c >= 500.f)
     {
-        return (fluid_real_t) 1.0;
+        return (fluid_real_t) 1.f;
     }
     else
     {
-        return fluid_pan_tab[(int)(c + 500)];
+        return fluid_pan_tab[(int)(c) + 500];
     }
 }
 
@@ -284,17 +274,17 @@ fluid_pan(fluid_real_t c, int left)
 fluid_real_t fluid_balance(fluid_real_t balance, int left)
 {
     /* This is the most common case */
-    if(balance == 0)
+    if(balance == 0.f)
     {
         return 1.0f;
     }
 
-    if((left && balance < 0) || (!left && balance > 0))
+    if((left && balance < 0.f) || (!left && balance > 0.f))
     {
         return 1.0f;
     }
 
-    if(balance < 0)
+    if(balance < 0.f)
     {
         balance = -balance;
     }
@@ -308,13 +298,13 @@ fluid_real_t fluid_balance(fluid_real_t balance, int left)
 fluid_real_t
 fluid_concave(fluid_real_t val)
 {
-    if(val < 0)
+    if(val < 0.f)
     {
-        return 0;
+        return 0.f;
     }
-    else if(val >= FLUID_VEL_CB_SIZE)
+    else if(val >= (fluid_real_t)FLUID_VEL_CB_SIZE)
     {
-        return 1;
+        return 1.f;
     }
 
     return fluid_concave_tab[(int) val];
@@ -326,13 +316,13 @@ fluid_concave(fluid_real_t val)
 fluid_real_t
 fluid_convex(fluid_real_t val)
 {
-    if(val < 0)
+    if(val < 0.f)
     {
-        return 0;
+        return 0.f;
     }
-    else if(val >= FLUID_VEL_CB_SIZE)
+    else if(val >= (fluid_real_t)FLUID_VEL_CB_SIZE)
     {
-        return 1;
+        return 1.f;
     }
 
     return fluid_convex_tab[(int) val];

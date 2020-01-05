@@ -50,7 +50,7 @@ int safe_fread(void *buf, int count, void *fd)
     {
         if(feof((FILE *)fd))
         {
-            FLUID_LOG(FLUID_ERR, "EOF while attemping to read %d bytes", count);
+            FLUID_LOG(FLUID_ERR, "EOF while attempting to read %d bytes", count);
         }
         else
         {
@@ -189,6 +189,7 @@ int fluid_sfloader_set_callbacks(fluid_sfloader_t *loader,
     cb->ftell = tell;
     cb->fclose = close;
 
+    // NOTE: if we ever make the instpatch loader public, this may return FLUID_FAILED
     return FLUID_OK;
 }
 
@@ -607,7 +608,7 @@ fluid_sample_set_sound_data(fluid_sample_t *sample,
             goto error_rec;
         }
 
-        FLUID_MEMSET(sample->data, 0, storedNbFrames);
+        FLUID_MEMSET(sample->data, 0, storedNbFrames * sizeof(short));
         FLUID_MEMCPY(sample->data + SAMPLE_LOOP_MARGIN, data, nbframes * sizeof(short));
 
         if(data24 != NULL)
@@ -626,7 +627,7 @@ fluid_sample_set_sound_data(fluid_sample_t *sample,
         /* pointers */
         /* all from the start of data */
         sample->start = SAMPLE_LOOP_MARGIN;
-        sample->end = SAMPLE_LOOP_MARGIN + storedNbFrames - 1;
+        sample->end = SAMPLE_LOOP_MARGIN + nbframes - 1;
     }
     else
     {

@@ -31,9 +31,6 @@
 /* Define to 1 if you have the <arpa/inet.h> header file. */
 #cmakedefine HAVE_ARPA_INET_H @HAVE_ARPA_INET_H@
 
-/* Define to 1 if you have the <dlfcn.h> header file. */
-#cmakedefine HAVE_DLFCN_H @HAVE_DLFCN_H@
-
 /* Define to 1 if you have the <errno.h> header file. */
 #cmakedefine HAVE_ERRNO_H @HAVE_ERRNO_H@
 
@@ -52,12 +49,6 @@
 /* Define if systemd support is enabled */
 #cmakedefine SYSTEMD_SUPPORT @SYSTEMD_SUPPORT@
 
-/* Define to 1 if you have the `MidiShare' library (-lMidiShare). */
-#cmakedefine HAVE_LIBMIDISHARE @HAVE_LIBMIDISHARE@
-
-/* Define to 1 if you have the `pthread' library (-lpthread). */
-#cmakedefine HAVE_LIBPTHREAD @HAVE_LIBPTHREAD@
-
 /* Define to 1 if you have the <limits.h> header file. */
 #cmakedefine HAVE_LIMITS_H @HAVE_LIMITS_H@
 
@@ -66,12 +57,6 @@
 
 /* Define to 1 if you have the <math.h> header file. */
 #cmakedefine HAVE_MATH_H @HAVE_MATH_H@
-
-/* Define to 1 if you have the <memory.h> header file. */
-#cmakedefine HAVE_MEMORY_H @HAVE_MEMORY_H@
-
-/* Define to 1 if you have the <MidiShare.h> header file. */
-#cmakedefine HAVE_MIDISHARE_H @HAVE_MIDISHARE_H@
 
 /* Define to 1 if you have the <netinet/in.h> header file. */
 #cmakedefine HAVE_NETINET_IN_H @HAVE_NETINET_IN_H@
@@ -108,9 +93,6 @@
 
 /* Define to 1 if you have the <string.h> header file. */
 #cmakedefine HAVE_STRING_H @HAVE_STRING_H@
-
-/* Define to 1 if you have the <sys/ioctl.h> header file. */
-#cmakedefine HAVE_SYS_IOCTL_H @HAVE_SYS_IOCTL_H@
 
 /* Define to 1 if you have the <sys/mman.h> header file. */
 #cmakedefine HAVE_SYS_MMAN_H @HAVE_SYS_MMAN_H@
@@ -154,6 +136,12 @@
 /* Define to enable network support */
 #cmakedefine NETWORK_SUPPORT @NETWORK_SUPPORT@
 
+/* Defined when fluidsynth is build in an automated environment, where no MSVC++ Runtime Debug Assertion dialogs should pop up */
+#cmakedefine NO_GUI @NO_GUI@
+
+/* libinstpatch for DLS and GIG */
+#cmakedefine LIBINSTPATCH_SUPPORT @LIBINSTPATCH_SUPPORT@
+
 /* libsndfile has ogg vorbis support */
 #cmakedefine LIBSNDFILE_HASVORBIS @LIBSNDFILE_HASVORBIS@
 
@@ -166,11 +154,14 @@
 /* Define if using the MinGW32 environment */
 #cmakedefine MINGW32 @MINGW32@
 
-/* Define to 1 if your C compiler doesn't accept -c and -o together. */
-#cmakedefine NO_MINUS_C_MINUS_O @NO_MINUS_C_MINUS_O@
-
 /* Define to enable OSS driver */
 #cmakedefine OSS_SUPPORT @OSS_SUPPORT@
+
+/* Define to enable OPENSLES driver */
+#cmakedefine OPENSLES_SUPPORT @OPENSLES_SUPPORT@
+
+/* Define to enable Oboe driver */
+#cmakedefine OBOE_SUPPORT @OBOE_SUPPORT@
 
 /* Name of package */
 #cmakedefine PACKAGE "@PACKAGE@"
@@ -241,5 +232,23 @@
 #ifndef __cplusplus
 #cmakedefine inline @INLINE_KEYWORD@
 #endif
+
+/* Define to 1 if you have the sinf() function. */
+#cmakedefine HAVE_SINF @HAVE_SINF@
+
+/* Define to 1 if you have the cosf() function. */
+#cmakedefine HAVE_COSF @HAVE_COSF@
+
+/* Define to 1 if you have the fabsf() function. */
+#cmakedefine HAVE_FABSF @HAVE_FABSF@
+
+/* Define to 1 if you have the powf() function. */
+#cmakedefine HAVE_POWF @HAVE_POWF@
+
+/* Define to 1 if you have the sqrtf() function. */
+#cmakedefine HAVE_SQRTF @HAVE_SQRTF@
+
+/* Define to 1 if you have the logf() function. */
+#cmakedefine HAVE_LOGF @HAVE_LOGF@
 
 #endif /* CONFIG_H */

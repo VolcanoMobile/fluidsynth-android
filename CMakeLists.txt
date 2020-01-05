@@ -128,8 +128,8 @@ set ( PACKAGE "fluidsynth" )
 
 # FluidSynth package version
 set ( FLUIDSYNTH_VERSION_MAJOR 2 )
-set ( FLUIDSYNTH_VERSION_MINOR 0 )
-set ( FLUIDSYNTH_VERSION_MICRO 7 )
+set ( FLUIDSYNTH_VERSION_MINOR 1 )
+set ( FLUIDSYNTH_VERSION_MICRO 0 )
 set ( VERSION "${FLUIDSYNTH_VERSION_MAJOR}.${FLUIDSYNTH_VERSION_MINOR}.${FLUIDSYNTH_VERSION_MICRO}" )
 set ( FLUIDSYNTH_VERSION "\"${VERSION}\"" )
 
@@ -143,7 +143,7 @@ set ( FLUIDSYNTH_VERSION "\"${VERSION}\"" )
 # if any interfaces have been removed/changed (compatibility broken): AGE=0
 # This is not exactly the same algorithm as the libtool one, but the results are the same.
 set ( LIB_VERSION_CURRENT 2 )
-set ( LIB_VERSION_AGE 2 )
+set ( LIB_VERSION_AGE 3 )
 set ( LIB_VERSION_REVISION 0 )
 set ( LIB_VERSION_INFO
       "${LIB_VERSION_CURRENT}.${LIB_VERSION_AGE}.${LIB_VERSION_REVISION}" )
@@ -155,6 +155,7 @@ option ( enable-fpe-check "enable Floating Point Exception checks and debug mess
 option ( enable-portaudio "compile PortAudio support" off )
 option ( enable-profiling "profile the dsp code" off )
 option ( enable-trap-on-fpe "enable SIGFPE trap on Floating Point Exceptions" off )
+option ( enable-ubsan "compile and link against UBSan (for debugging fluidsynth internals)" off )
 
 # Options enabled by default
 option ( enable-aufile "compile support for sound file output" on )
@@ -163,8 +164,11 @@ option ( enable-dbus "compile DBUS support (if it is available)" on )
 option ( enable-ipv6  "enable ipv6 support" on )
 option ( enable-jack "compile JACK support (if it is available)" on )
 option ( enable-ladspa "enable LADSPA effect units" on )
+option ( enable-libinstpatch "use libinstpatch (if available) to load DLS and GIG files" on )
 option ( enable-libsndfile "compile libsndfile support (if it is available)" on )
 option ( enable-midishare "compile MidiShare support (if it is available)" on )
+option ( enable-opensles "compile OpenSLES support (if it is available)" off )
+option ( enable-oboe "compile Oboe support (requires OpenSLES and/or AAudio)" off )
 option ( enable-network "enable network support (requires BSD sockets)" on )
 option ( enable-oss "compile OSS support (if it is available)" on )
 option ( enable-dsound "compile DirectSound support (if it is available)" on )
@@ -244,12 +248,10 @@ check_include_file ( math.h HAVE_MATH_H )
 check_include_file ( errno.h HAVE_ERRNO_H )
 check_include_file ( stdarg.h HAVE_STDARG_H )
 check_include_file ( unistd.h HAVE_UNISTD_H )
-check_include_file ( memory.h HAVE_MEMORY_H )
 check_include_file ( sys/mman.h HAVE_SYS_MMAN_H )
 check_include_file ( sys/types.h HAVE_SYS_TYPES_H )
 check_include_file ( sys/time.h HAVE_SYS_TIME_H )
 check_include_file ( sys/stat.h HAVE_SYS_STAT_H )
-check_include_file ( sys/ioctl.h HAVE_SYS_IOCTL_H )
 check_include_file ( fcntl.h HAVE_FCNTL_H )
 check_include_file ( sys/socket.h HAVE_SYS_SOCKET_H )
 check_include_file ( netinet/in.h HAVE_NETINET_IN_H )
@@ -269,9 +271,9 @@ unset ( LIBFLUID_CPPFLAGS CACHE )
 unset ( LIBFLUID_LIBS CACHE )
 unset ( FLUID_CPPFLAGS CACHE )
 unset ( FLUID_LIBS CACHE )
+unset ( ENABLE_UBSAN CACHE )
 
-# Options for the GNU C compiler only
-if ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "Intel" )
+if ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "Intel" )
   if ( NOT APPLE AND NOT OS2 )
     set ( CMAKE_EXE_LINKER_FLAGS
           "${CMAKE_EXE_LINKER_FLAGS} -Wl,--as-needed" )
@@ -280,7 +282,10 @@ if ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_
   endif ( NOT APPLE AND NOT OS2 )
   
   # define some warning flags
-  set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -W -Wpointer-arith -Wcast-qual -Wstrict-prototypes -Wno-unused-parameter -Wdeclaration-after-statement" )
+  set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -W -Wpointer-arith -Wcast-qual -Wstrict-prototypes -Wno-unused-parameter -Wdeclaration-after-statement -Werror=implicit-function-declaration" )
+  
+  # prepend to build type specific flags, to allow users to override
+  set ( CMAKE_C_FLAGS_DEBUG "-g ${CMAKE_C_FLAGS_DEBUG}" )
   
   if ( CMAKE_C_COMPILER_ID STREQUAL "Intel" )
     # icc needs the restrict flag to recognize C99 restrict pointers
@@ -288,15 +293,17 @@ if ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_
   else () # not intel
     # gcc and clang support bad function cast and alignment warnings; add them as well.
     set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wbad-function-cast -Wcast-align" )
-  endif (CMAKE_C_COMPILER_ID STREQUAL "Intel" )
 
-  # prepend to build type specific flags, to allow users to override
-  set ( CMAKE_C_FLAGS_DEBUG "-g -DDEBUG -fsanitize=undefined ${CMAKE_C_FLAGS_DEBUG}" )
-  
-endif ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "Intel" )
+    if ( enable-ubsan )
+      set ( CMAKE_C_FLAGS "-fsanitize=address,undefined ${CMAKE_C_FLAGS}" )
+      set ( CMAKE_EXE_LINKER_FLAGS "-fsanitize=address,undefined ${CMAKE_EXE_LINKER_FLAGS}" )
+      set ( CMAKE_SHARED_LINKER_FLAGS "-fsanitize=address,undefined ${CMAKE_SHARED_LINKER_FLAGS}" )
+      set ( ENABLE_UBSAN 1 )
+    endif ( enable-ubsan )
+  endif (CMAKE_C_COMPILER_ID STREQUAL "Intel" )
+endif ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "Intel" )
 
 # Windows
-unset ( WINDOWS_SUPPORT CACHE )
 unset ( WINDOWS_LIBS CACHE )
 unset ( DSOUND_SUPPORT CACHE )
 unset ( WAVEOUT_SUPPORT CACHE )
@@ -310,8 +317,6 @@ if ( WIN32 )
   check_include_file ( io.h HAVE_IO_H )
   check_include_file ( dsound.h HAVE_DSOUND_H )
   check_include_files ( "windows.h;mmsystem.h" HAVE_MMSYSTEM_H )
-
-  set ( WINDOWS_SUPPORT ${HAVE_WINDOWS_H} )
 
   if ( enable-network )
     set ( WINDOWS_LIBS "${WINDOWS_LIBS};ws2_32" )
@@ -367,7 +372,6 @@ if ( WIN32 )
 else ( WIN32 )
 # Check PThreads, but not in Windows
   find_package ( Threads REQUIRED )
-  set ( HAVE_LIBPTHREAD ${Threads_FOUND} )
   set ( LIBFLUID_LIBS "m" ${CMAKE_THREAD_LIBS_INIT} )
 endif ( WIN32 )
 
@@ -445,7 +449,7 @@ unset ( WITH_PROFILING CACHE )
 if ( enable-profiling )
     set ( WITH_PROFILING 1 )
     if ( CMAKE_C_COMPILER_ID STREQUAL "Clang" )
-      set ( OPT_FLAGS "-Rpass=loop-vectorize -Rpass-analysis=loop-vectorize" )
+      set ( OPT_FLAGS "-Rpass=loop-vectorize" ) # -Rpass-analysis=loop-vectorize" )
     elseif ( CMAKE_C_COMPILER_ID STREQUAL "Intel" )
       set ( OPT_FLAGS "-qopt-report=3" )
     elseif ( CMAKE_C_COMPILER_ID STREQUAL "GNU" )
@@ -477,10 +481,10 @@ endif ( enable-trap-on-fpe AND NOT APPLE AND NOT WIN32 )
 
 unset ( ENABLE_FPECHECK CACHE )
 unset ( FPE_CHECK CACHE )
-if ( enable-fpe-check )
+if ( enable-fpe-check AND NOT APPLE AND NOT WIN32 )
     set ( ENABLE_FPECHECK 1 )
     set ( FPE_CHECK 1 )
-endif ( enable-fpe-check )
+endif ( enable-fpe-check AND NOT APPLE AND NOT WIN32 )
 
 if ( enable-debug )
     set ( CMAKE_BUILD_TYPE "Debug" CACHE STRING
@@ -493,10 +497,9 @@ if ( NOT CMAKE_BUILD_TYPE )
 endif ( NOT CMAKE_BUILD_TYPE )
 
 unset ( ENABLE_DEBUG CACHE )
-unset ( DEBUG CACHE )
 if ( CMAKE_BUILD_TYPE MATCHES "Debug" )
     set ( ENABLE_DEBUG 1 )
-    set ( DEBUG 1 )
+    add_definitions(-DDEBUG)
 endif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
 
 # Additional targets to perform clang-format/clang-tidy
@@ -658,7 +661,21 @@ else(NOT enable-pkgconfig)
         set ( LADSPA 1 )
     endif ( LADSPA_SUPPORT )
     endif ( enable-ladspa )
-    
+
+    unset ( LIBINSTPATCH_SUPPORT CACHE )
+    if ( enable-libinstpatch )
+        pkg_check_modules ( LIBINSTPATCH libinstpatch-1.0>=1.1.0 )
+        set ( LIBINSTPATCH_SUPPORT ${LIBINSTPATCH_FOUND} )
+    endif ( enable-libinstpatch )
+
+    unset ( SDL2_SUPPORT CACHE )
+    if ( enable-sdl2 )
+        pkg_check_modules ( SDL2 sdl2 )
+        set ( SDL2_SUPPORT ${SDL2_FOUND} )
+    else ( enable-sdl2 )
+        unset_pkg_config ( SDL2 )
+    endif ( enable-sdl2 )
+
 endif(NOT enable-pkgconfig)
 
 unset ( AUFILE_SUPPORT CACHE )
@@ -671,20 +688,6 @@ if ( enable-oss )
   find_package ( OSS QUIET )
   set ( OSS_SUPPORT ${OSS_FOUND} )
 endif ( enable-oss )
-
-unset ( SDL2_SUPPORT CACHE )
-unset ( SDL2_INCLUDE_DIR CACHE )
-unset ( SDL2_LIBRARY CACHE )
-if ( enable-sdl2 )
-  find_package ( SDL2 )
-
-  if ( SDL2_FOUND )
-    set ( SDL2_SUPPORT ${SDL2_FOUND} )
-  else ( SDL2_FOUND)
-    unset ( SDL2_INCLUDE_DIR CACHE )
-    unset ( SDL2_LIBRARY CACHE )
-  endif ( SDL2_FOUND )
-endif ( enable-sdl2 )
 
 unset ( MIDISHARE_SUPPORT CACHE )
 if ( enable-midishare )
@@ -699,7 +702,32 @@ else ( enable-midishare )
   unset ( MidiShare_LIBS CACHE )
 endif ( enable-midishare )
 
+unset ( OPENSLES_SUPPORT CACHE )
+unset ( OpenSLES_LIBS CACHE )
+if ( enable-opensles )
+  check_include_file ( SLES/OpenSLES.h OPENSLES_SUPPORT )
+  if ( OPENSLES_SUPPORT )
+    find_library ( OpenSLES_LIBS OpenSLES )
+    if ( NOT OpenSLES_LIBS )
+      unset ( OPENSLES_SUPPORT )
+    endif ( NOT OpenSLES_LIBS )
+  endif ( OPENSLES_SUPPORT )
+endif ( enable-opensles )
+
+unset ( OBOE_SUPPORT CACHE )
+unset ( OBOE_LIBS CACHE )
+if ( enable-oboe )
+  # enable C++ as it's needed for oboe
+  enable_language ( CXX )
+  pkg_check_modules ( OBOE oboe-1.0 )
+  if ( OBOE_FOUND )
+    set ( OBOE_SUPPORT 1 )
+    set ( OBOE_LIBS ${OBOE_LIBRARIES} )
+  endif ( OBOE_FOUND )
+endif ( enable-oboe )
+
 unset ( WITH_READLINE CACHE )
+unset ( READLINE_LIBS CACHE )
 if ( enable-readline )
   find_package ( Readline )
   set ( FOUND_READLINE ${HAVE_READLINE} )
@@ -707,8 +735,6 @@ if ( enable-readline )
     set ( WITH_READLINE 1 )
     set ( READLINE_LIBS ${READLINE_LIBRARIES} )
   endif ( HAVE_READLINE )
-else ( enable-readline )
-  unset ( READLINE_LIBS CACHE )
 endif ( enable-readline )
 
 unset ( ENABLE_MIXER_THREADS CACHE )
@@ -736,6 +762,44 @@ endif()
 set(TEST_SOUNDFONT "${CMAKE_SOURCE_DIR}/sf2/VintageDreamsWaves-v2.sf2")
 set(TEST_SOUNDFONT_SF3 "${CMAKE_SOURCE_DIR}/sf2/VintageDreamsWaves-v2.sf3")
 
+# Check for C99 float math
+
+unset ( HAVE_SINF CACHE )
+CHECK_FUNCTION_EXISTS ( "sinf" HAVE_SINF )
+if ( HAVE_SINF )
+  set ( HAVE_SINF 1 )
+endif ( HAVE_SINF )
+
+unset ( HAVE_COSF CACHE )
+CHECK_FUNCTION_EXISTS ( "cosf" HAVE_COSF )
+if ( HAVE_COSF )
+  set ( HAVE_COSF 1 )
+endif ( HAVE_COSF )
+
+unset ( HAVE_FABSF CACHE )
+CHECK_FUNCTION_EXISTS ( "fabsf" HAVE_FABSF )
+if ( HAVE_FABSF )
+  set ( HAVE_FABSF 1 )
+endif ( HAVE_FABSF )
+
+unset ( HAVE_POWF CACHE )
+CHECK_FUNCTION_EXISTS ( "powf" HAVE_POWF )
+if ( HAVE_POWF )
+  set ( HAVE_POWF 1 )
+endif ( HAVE_POWF )
+
+unset ( HAVE_SQRTF CACHE )
+CHECK_FUNCTION_EXISTS ( "sqrtf" HAVE_SQRTF )
+if ( HAVE_SQRTF )
+  set ( HAVE_SQRTF 1 )
+endif ( HAVE_SQRTF )
+
+unset ( HAVE_LOGF CACHE )
+CHECK_FUNCTION_EXISTS ( "logf" HAVE_LOGF )
+if ( HAVE_LOGF )
+  set ( HAVE_LOGF 1 )
+endif ( HAVE_LOGF )
+
 # General configuration file
 configure_file ( ${CMAKE_SOURCE_DIR}/src/config.cmake
                  ${CMAKE_BINARY_DIR}/config.h )
@@ -750,6 +814,8 @@ link_directories (
     ${PORTAUDIO_LIBRARY_DIRS}
     ${LIBSNDFILE_LIBRARY_DIRS}
     ${DBUS_LIBRARY_DIRS}
+    ${SDL2_LIBRARY_DIRS}
+    ${OBOE_LIBRARY_DIRS}
 )
 
 # Process subdirectories

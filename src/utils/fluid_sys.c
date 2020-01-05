@@ -192,6 +192,29 @@ fluid_log(int level, const char *fmt, ...)
     return FLUID_FAILED;
 }
 
+void* fluid_alloc(size_t len)
+{
+    void* ptr = malloc(len);
+
+#if defined(DEBUG) && !defined(_MSC_VER)
+    // garbage initialize allocated memory for debug builds to ease reproducing
+    // bugs like 44453ff23281b3318abbe432fda90888c373022b .
+    //
+    // MSVC++ already garbage initializes allocated memory by itself (debug-heap).
+    //
+    // 0xCC because
+    // * it makes pointers reliably crash when dereferencing them,
+    // * floating points are still some valid but insanely huge negative number, and
+    // * if for whatever reason this allocated memory is executed, it'll trigger
+    //   INT3 (...at least on x86)
+    if(ptr != NULL)
+    {
+        memset(ptr, 0xCC, len);
+    }
+#endif
+    return ptr;
+}
+
 /**
  * Convenience wrapper for free() that satisfies at least C90 requirements.
  * Especially useful when using fluidsynth with programming languages that do not provide malloc() and free().
@@ -211,7 +234,7 @@ void fluid_free(void* ptr)
  * @internal
  * @param str Pointer to a string pointer of source to tokenize.  Pointer gets
  *   updated on each invocation to point to beginning of next token.  Note that
- *   token char get's overwritten with a 0 byte.  String pointer is set to NULL
+ *   token char gets overwritten with a 0 byte.  String pointer is set to NULL
  *   when final token is returned.
  * @param delim String of delimiter chars.
  * @return Pointer to the next token or NULL if no more tokens.
@@ -290,22 +313,21 @@ void fluid_msleep(unsigned int msecs)
 
 /**
  * Get time in milliseconds to be used in relative timing operations.
- * @return Unix time in milliseconds.
+ * @return Monotonic time in milliseconds.
  */
 unsigned int fluid_curtime(void)
 {
-    static long initial_seconds = 0;
-    struct timespec timeval;
+    float now;
+    static float initial_time = 0;
 
-    if(initial_seconds == 0)
+    if(initial_time == 0)
     {
-        clock_gettime(CLOCK_REALTIME, &timeval);
-        initial_seconds = timeval.tv_sec;
+        initial_time = (float)fluid_utime();
     }
 
-    clock_gettime(CLOCK_REALTIME, &timeval);
+    now = (float)fluid_utime();
 
-    return (unsigned int)((timeval.tv_sec - initial_seconds) * 1000.0 + timeval.tv_nsec / 1000000.0);
+    return (unsigned int)((now - initial_time) / 1000.0f);
 }
 
 /**
@@ -462,7 +484,7 @@ void fluid_clear_fpe_i386(void)
  */
 
 #if WITH_PROFILING
-/* Profiling interface beetween profiling command shell and audio rendering API
+/* Profiling interface between profiling command shell and audio rendering API
   (FluidProfile_0004.pdf- 3.2.2).
   Macros are in defined in fluid_sys.h.
 */
@@ -641,8 +663,8 @@ static void fluid_profiling_print_load(double sample_rate, fluid_ostream_t out)
 * @param sample_rate the sample rate of audio output.
 * @param out output stream device.
 *
-* When print mode is 1, the function prints all the informations (see below).
-* When print mode is 0, the fonction prints only the cpu loads.
+* When print mode is 1, the function prints all the information (see below).
+* When print mode is 0, the function prints only the cpu loads.
 *
 * ------------------------------------------------------------------------------
 * Duration(microsecond) and cpu loads(%) (sr: 44100 Hz, sp: 22.68 microsecond)
@@ -1199,6 +1221,9 @@ fluid_istream_gets(fluid_istream_t in, char *buf, int len)
         /* Handle read differently depending on if its a socket or file descriptor */
         if(!(in & FLUID_SOCKET_FLAG))
         {
+            // usually read() is supposed to return '\n' as last valid character of the user input
+            // when compiled with compatibility for WinXP however, read() may return 0 (EOF) rather than '\n'
+            // this would cause the shell to exit early
             n = read(in, &c, 1);
 
             if(n == -1)
@@ -1222,7 +1247,8 @@ fluid_istream_gets(fluid_istream_t in, char *buf, int len)
         if(n == 0)
         {
             *buf = 0;
-            return 0;
+            // return 1 if read from stdin, else 0, to fix early exit of shell
+            return (in == STDIN_FILENO);
         }
 
         if(c == '\n')
@@ -1392,7 +1418,7 @@ static fluid_thread_return_t fluid_server_socket_run(void *data)
         {
             if(server_socket->cont)
             {
-                FLUID_LOG(FLUID_ERR, "Failed to accept connection: %ld", fluid_socket_get_error());
+                FLUID_LOG(FLUID_ERR, "Failed to accept connection: %d", fluid_socket_get_error());
             }
 
             server_socket->cont = 0;
@@ -1451,7 +1477,7 @@ new_fluid_server_socket(int port, fluid_server_func_t func, void *data)
 
     if(sock == INVALID_SOCKET)
     {
-        FLUID_LOG(FLUID_ERR, "Failed to create server socket: %ld", fluid_socket_get_error());
+        FLUID_LOG(FLUID_ERR, "Failed to create server socket: %d", fluid_socket_get_error());
         fluid_socket_cleanup();
         return NULL;
     }
@@ -1466,7 +1492,7 @@ new_fluid_server_socket(int port, fluid_server_func_t func, void *data)
 
     if(sock == INVALID_SOCKET)
     {
-        FLUID_LOG(FLUID_ERR, "Failed to create server socket: %ld", fluid_socket_get_error());
+        FLUID_LOG(FLUID_ERR, "Failed to create server socket: %d", fluid_socket_get_error());
         fluid_socket_cleanup();
         return NULL;
     }
@@ -1479,7 +1505,7 @@ new_fluid_server_socket(int port, fluid_server_func_t func, void *data)
 
     if(bind(sock, (const struct sockaddr *) &addr, sizeof(addr)) == SOCKET_ERROR)
     {
-        FLUID_LOG(FLUID_ERR, "Failed to bind server socket: %ld", fluid_socket_get_error());
+        FLUID_LOG(FLUID_ERR, "Failed to bind server socket: %d", fluid_socket_get_error());
         fluid_socket_close(sock);
         fluid_socket_cleanup();
         return NULL;
@@ -1487,7 +1513,7 @@ new_fluid_server_socket(int port, fluid_server_func_t func, void *data)
 
     if(listen(sock, SOMAXCONN) == SOCKET_ERROR)
     {
-        FLUID_LOG(FLUID_ERR, "Failed to listen on server socket: %ld", fluid_socket_get_error());
+        FLUID_LOG(FLUID_ERR, "Failed to listen on server socket: %d", fluid_socket_get_error());
         fluid_socket_close(sock);
         fluid_socket_cleanup();
         return NULL;

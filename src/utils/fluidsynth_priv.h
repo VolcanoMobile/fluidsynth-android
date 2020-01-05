@@ -20,7 +20,7 @@
 
 /*
  * @file fluidsynth_priv.h
- * 
+ *
  * lightweight part of fluid_sys.h, containing forward declarations of fluidsynth's private types and private macros
  *
  * include this one file in fluidsynth's private header files
@@ -134,19 +134,82 @@ typedef void (*fluid_rvoice_function_t)(void *obj, const fluid_rvoice_param_t pa
  *                      SYSTEM INTERFACE
  */
 
-#define FLUID_MALLOC(_n)             malloc(_n)
+/* Math constants */
+#ifndef M_PI
+#define M_PI 3.1415926535897932384626433832795
+#endif
+
+#ifndef M_LN2
+#define M_LN2 0.69314718055994530941723212145818
+#endif
+
+#ifndef M_LN10
+#define M_LN10 2.3025850929940456840179914546844
+#endif
+
+#define FLUID_M_PI      ((fluid_real_t)M_PI)
+#define FLUID_M_LN2     ((fluid_real_t)M_LN2)
+#define FLUID_M_LN10    ((fluid_real_t)M_LN10)
+
+/* Math functions */
+#if defined WITH_FLOAT && defined HAVE_SINF
+#define FLUID_SIN   sinf
+#else
+#define FLUID_SIN   (fluid_real_t)sin
+#endif
+
+#if defined WITH_FLOAT && defined HAVE_COSF
+#define FLUID_COS   cosf
+#else
+#define FLUID_COS   (fluid_real_t)cos
+#endif
+
+#if defined WITH_FLOAT && defined HAVE_FABSF
+#define FLUID_FABS  fabsf
+#else
+#define FLUID_FABS  (fluid_real_t)fabs
+#endif
+
+#if defined WITH_FLOAT && defined HAVE_POWF
+#define FLUID_POW   powf
+#else
+#define FLUID_POW   (fluid_real_t)pow
+#endif
+
+#if defined WITH_FLOAT && defined HAVE_SQRTF
+#define FLUID_SQRT  sqrtf
+#else
+#define FLUID_SQRT  (fluid_real_t)sqrt
+#endif
+
+#if defined WITH_FLOAT && defined HAVE_LOGF
+#define FLUID_LOGF  logf
+#else
+#define FLUID_LOGF  (fluid_real_t)log
+#endif
+
+/* Memory allocation */
+#define FLUID_MALLOC(_n)             fluid_alloc(_n)
 #define FLUID_REALLOC(_p,_n)         realloc(_p,_n)
-#define FLUID_NEW(_t)                (_t*)malloc(sizeof(_t))
-#define FLUID_ARRAY_ALIGNED(_t,_n,_a) (_t*)malloc((_n)*sizeof(_t) + ((unsigned int)_a - 1u))
-#define FLUID_ARRAY(_t,_n)           FLUID_ARRAY_ALIGNED(_t,_n,1u)
 #define FLUID_FREE(_p)               fluid_free(_p)
+#define FLUID_NEW(_t)                (_t*)FLUID_MALLOC(sizeof(_t))
+#define FLUID_ARRAY_ALIGNED(_t,_n,_a) (_t*)FLUID_MALLOC((_n)*sizeof(_t) + ((unsigned int)_a - 1u))
+#define FLUID_ARRAY(_t,_n)           FLUID_ARRAY_ALIGNED(_t,_n,1u)
+
+void* fluid_alloc(size_t len);
+
+/* File access */
 #define FLUID_FOPEN(_f,_m)           fopen(_f,_m)
 #define FLUID_FCLOSE(_f)             fclose(_f)
 #define FLUID_FREAD(_p,_s,_n,_f)     fread(_p,_s,_n,_f)
 #define FLUID_FSEEK(_f,_n,_set)      fseek(_f,_n,_set)
 #define FLUID_FTELL(_f)              ftell(_f)
+
+/* Memory functions */
 #define FLUID_MEMCPY(_dst,_src,_n)   memcpy(_dst,_src,_n)
 #define FLUID_MEMSET(_s,_c,_n)       memset(_s,_c,_n)
+
+/* String functions */
 #define FLUID_STRLEN(_s)             strlen(_s)
 #define FLUID_STRCMP(_s,_t)          strcmp(_s,_t)
 #define FLUID_STRNCMP(_s,_t,_n)      strncmp(_s,_t,_n)
@@ -171,8 +234,8 @@ do { strncpy(_dst,_src,_n); \
 
 #if (defined(WIN32) && _MSC_VER < 1900) || defined(MINGW32)
 /* need to make sure we use a C99 compliant implementation of (v)snprintf(),
- * i.e. not microsofts non compliant extension _snprintf() as it doesnt
- * reliably null-terminates the buffer
+ * i.e. not microsofts non compliant extension _snprintf() as it doesn't
+ * reliably null-terminate the buffer
  */
 #define FLUID_SNPRINTF           g_snprintf
 #else
@@ -218,18 +281,6 @@ do { strncpy(_dst,_src,_n); \
 #define FLUID_LOG                    (void)sizeof
 #else
 #define FLUID_LOG                    fluid_log
-#endif
-
-#ifndef M_PI
-#define M_PI 3.1415926535897932384626433832795
-#endif
-
-#ifndef M_LN2
-#define M_LN2 0.69314718055994530941723212145818
-#endif
-
-#ifndef M_LN10
-#define M_LN10 2.3025850929940456840179914546844
 #endif
 
 #ifdef DEBUG

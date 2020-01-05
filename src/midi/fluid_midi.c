@@ -180,7 +180,7 @@ fluid_file_read_full(fluid_file fp, size_t *length)
         return NULL;
     }
 
-    FLUID_LOG(FLUID_DBG, "File load: Allocating %d bytes", buflen);
+    FLUID_LOG(FLUID_DBG, "File load: Allocating %zu bytes", buflen);
     buffer = FLUID_MALLOC(buflen);
 
     if(buffer == NULL)
@@ -193,7 +193,7 @@ fluid_file_read_full(fluid_file fp, size_t *length)
 
     if(n != buflen)
     {
-        FLUID_LOG(FLUID_ERR, "Only read %d bytes; expected %d", n,
+        FLUID_LOG(FLUID_ERR, "Only read %zu bytes; expected %zu", n,
                   buflen);
         FLUID_FREE(buffer);
         return NULL;
@@ -1910,14 +1910,14 @@ fluid_player_load(fluid_player_t *player, fluid_playlist_item *item)
 
         buffer = fluid_file_read_full(fp, &buffer_length);
 
+        FLUID_FCLOSE(fp);
+
         if(buffer == NULL)
         {
-            FLUID_FCLOSE(fp);
             return FLUID_FAILED;
         }
 
         buffer_owned = 1;
-        FLUID_FCLOSE(fp);
     }
     else
     {
@@ -2354,7 +2354,7 @@ delete_fluid_midi_parser(fluid_midi_parser_t *parser)
  * apps to abuse fluidsynth as midi parser, e.g. feeding it with rawmidi and pull out
  * the needed midi information using the getter functions of fluid_midi_event_t.
  * This parser however is incomplete as it e.g. only provides a limited buffer to
- * store and process SYSEX data (i.e. doesnt allow arbitrary lengths)
+ * store and process SYSEX data (i.e. doesn't allow arbitrary lengths)
  */
 fluid_midi_event_t *
 fluid_midi_parser_parse(fluid_midi_parser_t *parser, unsigned char c)

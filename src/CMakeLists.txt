@@ -31,13 +31,14 @@ include_directories (
     ${CMAKE_SOURCE_DIR}/src/bindings
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_BINARY_DIR}/include
-    ${PTHREADS_INCLUDE_DIR}
-    ${SDL2_INCLUDE_DIR}
 )
 
 include_directories (
     SYSTEM
     ${GLIB_INCLUDE_DIRS}
+    ${PTHREADS_INCLUDE_DIR}
+    ${SDL2_INCLUDE_DIR}
+    ${LIBINSTPATCH_INCLUDE_DIRS}
 )
 
 # ************ library ************
@@ -93,6 +94,7 @@ endif ( WINMIDI_SUPPORT )
 
 if ( SDL2_SUPPORT )
   set ( fluid_sdl2_SOURCES drivers/fluid_sdl2.c )
+  include_directories ( ${SDL2_INCLUDE_DIRS} )
 endif ( SDL2_SUPPORT )
 
 if ( OSS_SUPPORT )
@@ -125,6 +127,20 @@ endif ( MIDISHARE_SUPPORT )
 if ( AUFILE_SUPPORT )
   set ( fluid_aufile_SOURCES drivers/fluid_aufile.c )
 endif ( AUFILE_SUPPORT )
+
+if ( LIBINSTPATCH_SUPPORT )
+  set ( fluid_libinstpatch_SOURCES sfloader/fluid_instpatch.c sfloader/fluid_instpatch.h )
+endif ( LIBINSTPATCH_SUPPORT )
+
+if ( OPENSLES_SUPPORT )
+  set ( fluid_opensles_SOURCES drivers/fluid_opensles.c )
+  include_directories ( ${OpenSLES_INCLUDE_DIRS} )
+endif ( OPENSLES_SUPPORT )
+
+if ( OBOE_SUPPORT )
+  set ( fluid_oboe_SOURCES drivers/fluid_oboe.cpp )
+  include_directories ( ${OBOE_INCLUDE_DIRS} )
+endif ( OBOE_SUPPORT )
 
 set ( config_SOURCES ${CMAKE_BINARY_DIR}/config.h )
 
@@ -257,6 +273,8 @@ add_library ( libfluidsynth-OBJ OBJECT
     ${fluid_jack_SOURCES}
     ${fluid_lash_SOURCES}
     ${fluid_midishare_SOURCES}
+    ${fluid_opensles_SOURCES}
+    ${fluid_oboe_SOURCES}
     ${fluid_oss_SOURCES}
     ${fluid_portaudio_SOURCES}
     ${fluid_pulse_SOURCES}
@@ -264,6 +282,7 @@ add_library ( libfluidsynth-OBJ OBJECT
     ${fluid_waveout_SOURCES}
     ${fluid_winmidi_SOURCES}
     ${fluid_sdl2_SOURCES}
+    ${fluid_libinstpatch_SOURCES}
     ${libfluidsynth_SOURCES}
     ${public_HEADERS}
     ${public_main_HEADER}
@@ -331,7 +350,7 @@ target_link_libraries ( libfluidsynth
     ${PULSE_LIBRARIES}
     ${PORTAUDIO_LIBRARIES}
     ${LIBSNDFILE_LIBRARIES}
-    ${SDL2_LIBRARY}
+    ${SDL2_LIBRARIES}
     ${DBUS_LIBRARIES}
     ${READLINE_LIBS}
     ${DART_LIBS}
@@ -339,7 +358,10 @@ target_link_libraries ( libfluidsynth
     ${COREMIDI_LIBS}
     ${WINDOWS_LIBS}
     ${MidiShare_LIBS}
+    ${OpenSLES_LIBS}
+    ${OBOE_LIBS}
     ${LIBFLUID_LIBS}
+    ${LIBINSTPATCH_LIBRARIES}
 )
 
 # ************ CLI program ************

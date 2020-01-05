@@ -263,7 +263,7 @@ new_fluid_jack_client(fluid_settings_t *settings, int isaudio, void *driver)
     }
 
     /* tell the lash server our client name */
-#ifdef LASH_ENABLED
+#ifdef HAVE_LASH
     {
         int enable_lash = 0;
         fluid_settings_getint(settings, "lash.enable", &enable_lash);
@@ -273,7 +273,7 @@ new_fluid_jack_client(fluid_settings_t *settings, int isaudio, void *driver)
             fluid_lash_jack_client_name(fluid_lash_client, name);
         }
     }
-#endif /* LASH_ENABLED */
+#endif /* HAVE_LASH */
 
     client_ref->server = server;        /* !! takes over allocation */
     server = NULL;      /* Set to NULL so it doesn't get freed below */
@@ -328,7 +328,7 @@ fluid_jack_client_register_ports(void *driver, int isaudio, jack_client_t *clien
     char name[64];
     int multi;
     int i;
-    int jack_srate;
+    unsigned long jack_srate;
     double sample_rate;
 
     if(!isaudio)
@@ -491,10 +491,10 @@ fluid_jack_client_register_ports(void *driver, int isaudio, jack_client_t *clien
 
     fluid_settings_getnum(settings, "synth.sample-rate", &sample_rate);
 
-    if((int)sample_rate != jack_srate)
+    if((unsigned long)sample_rate != jack_srate)
     {
         FLUID_LOG(FLUID_INFO, "Jack sample rate mismatch, adjusting."
-                  " (synth.sample-rate=%lu, jackd=%lu)", (int)sample_rate, jack_srate);
+                  " (synth.sample-rate=%lu, jackd=%lu)", (unsigned long)sample_rate, jack_srate);
         fluid_settings_setnum(settings, "synth.sample-rate", jack_srate);
     }
 

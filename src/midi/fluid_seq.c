@@ -58,11 +58,6 @@ struct _fluid_sequencer_t
     fluid_evt_entry *queueLater;
     fluid_evt_heap_t *heap;
     fluid_mutex_t mutex;
-#if FLUID_SEQ_WITH_TRACE
-    char *tracebuf;
-    char *traceptr;
-    int tracelen;
-#endif
 };
 
 /* Private data for clients */
@@ -136,21 +131,6 @@ new_fluid_sequencer2(int use_system_timer)
         return NULL;
     }
 
-#if FLUID_SEQ_WITH_TRACE
-    seq->tracelen = 1024 * 100;
-    seq->tracebuf = (char *)FLUID_MALLOC(seq->tracelen);
-
-    if(seq->tracebuf == NULL)
-    {
-        _fluid_seq_queue_end(seq);
-        FLUID_FREE(seq);
-        FLUID_LOG(FLUID_PANIC, "sequencer: Out of memory\n");
-        return NULL;
-    }
-
-    seq->traceptr = seq->tracebuf;
-#endif
-
     return(seq);
 }
 
@@ -184,16 +164,6 @@ delete_fluid_sequencer(fluid_sequencer_t *seq)
     		seq->clients = NULL;
     	}*/
 
-#if FLUID_SEQ_WITH_TRACE
-
-    if(seq->tracebuf != NULL)
-    {
-        FLUID_FREE(seq->tracebuf);
-    }
-
-    seq->tracebuf = NULL;
-#endif
-
     FLUID_FREE(seq);
 }
 
@@ -206,69 +176,11 @@ delete_fluid_sequencer(fluid_sequencer_t *seq)
 int
 fluid_sequencer_get_use_system_timer(fluid_sequencer_t *seq)
 {
+    fluid_return_val_if_fail(seq != NULL, FALSE);
+
     return seq->useSystemTimer;
 }
 
-
-#if FLUID_SEQ_WITH_TRACE
-
-/* trace */
-void
-fluid_seq_dotrace(fluid_sequencer_t *seq, char *fmt, ...)
-{
-    va_list args;
-    int len, remain = seq->tracelen - (seq->traceptr - seq->tracebuf);
-
-    if(remain <= 0)
-    {
-        return;
-    }
-
-    va_start(args, fmt);
-    len = FLUID_VSNPRINTF(seq->traceptr, remain, fmt, args);
-    va_end(args);
-
-    if(len > 0)
-    {
-        if(len <= remain)
-        {
-            // all written, with 0 at end
-            seq->traceptr += len;
-        }
-        else
-        {
-            // not enough room, set to end
-            seq->traceptr = seq->tracebuf + seq->tracelen;
-        }
-    }
-
-    return;
-}
-
-/**
- * Clear sequencer trace buffer.
- * @param seq Sequencer object
- */
-void
-fluid_seq_cleartrace(fluid_sequencer_t *seq)
-{
-    seq->traceptr = seq->tracebuf;
-}
-
-/**
- * Get sequencer trace buffer.
- * @param seq Sequencer object
- */
-char *
-fluid_seq_gettrace(fluid_sequencer_t *seq)
-{
-    return seq->tracebuf;
-}
-#else
-
-void fluid_seq_dotrace(fluid_sequencer_t *seq, char *fmt, ...) {}
-
-#endif // FLUID_SEQ_WITH_TRACE
 
 /* clients */
 
@@ -292,6 +204,8 @@ fluid_sequencer_register_client(fluid_sequencer_t *seq, const char *name,
 {
     fluid_sequencer_client_t *client;
     char *nameCopy;
+
+    fluid_return_val_if_fail(seq != NULL, FLUID_FAILED);
 
     client = FLUID_NEW(fluid_sequencer_client_t);
 
@@ -332,10 +246,7 @@ fluid_sequencer_unregister_client(fluid_sequencer_t *seq, fluid_seq_id_t id)
 {
     fluid_list_t *tmp;
 
-    if(seq->clients == NULL)
-    {
-        return;
-    }
+    fluid_return_if_fail(seq != NULL);
 
     tmp = seq->clients;
 
@@ -370,7 +281,7 @@ fluid_sequencer_unregister_client(fluid_sequencer_t *seq, fluid_seq_id_t id)
 int
 fluid_sequencer_count_clients(fluid_sequencer_t *seq)
 {
-    if(seq->clients == NULL)
+    if(seq == NULL || seq->clients == NULL)
     {
         return 0;
     }
@@ -386,7 +297,12 @@ fluid_sequencer_count_clients(fluid_sequencer_t *seq)
  */
 fluid_seq_id_t fluid_sequencer_get_client_id(fluid_sequencer_t *seq, int index)
 {
-    fluid_list_t *tmp = fluid_list_nth(seq->clients, index);
+    fluid_list_t *tmp;
+
+    fluid_return_val_if_fail(seq != NULL, FLUID_FAILED);
+    fluid_return_val_if_fail(index >= 0, FLUID_FAILED);
+
+    tmp = fluid_list_nth(seq->clients, index);
 
     if(tmp == NULL)
     {
@@ -411,10 +327,7 @@ fluid_sequencer_get_client_name(fluid_sequencer_t *seq, fluid_seq_id_t id)
 {
     fluid_list_t *tmp;
 
-    if(seq->clients == NULL)
-    {
-        return NULL;
-    }
+    fluid_return_val_if_fail(seq != NULL, NULL);
 
     tmp = seq->clients;
 
@@ -444,10 +357,7 @@ fluid_sequencer_client_is_dest(fluid_sequencer_t *seq, fluid_seq_id_t id)
 {
     fluid_list_t *tmp;
 
-    if(seq->clients == NULL)
-    {
-        return FALSE;
-    }
+    fluid_return_val_if_fail(seq != NULL, FALSE);
 
     tmp = seq->clients;
 
@@ -469,16 +379,21 @@ fluid_sequencer_client_is_dest(fluid_sequencer_t *seq, fluid_seq_id_t id)
 /**
  * Send an event immediately.
  * @param seq Sequencer object
- * @param evt Event to send (copied)
+ * @param evt Event to send (not copied, used directly)
  */
-/* Event not actually copied, but since its used immediately it virtually is. */
 void
 fluid_sequencer_send_now(fluid_sequencer_t *seq, fluid_event_t *evt)
 {
-    fluid_seq_id_t destID = fluid_event_get_dest(evt);
+    fluid_seq_id_t destID;
+    fluid_list_t *tmp;
+
+    fluid_return_if_fail(seq != NULL);
+    fluid_return_if_fail(evt != NULL);
+
+    destID = fluid_event_get_dest(evt);
 
     /* find callback */
-    fluid_list_t *tmp = seq->clients;
+    tmp = seq->clients;
 
     while(tmp)
     {
@@ -501,7 +416,7 @@ fluid_sequencer_send_now(fluid_sequencer_t *seq, fluid_event_t *evt)
 /**
  * Schedule an event for sending at a later time.
  * @param seq Sequencer object
- * @param evt Event to send
+ * @param evt Event to send (will be copied into internal queue)
  * @param time Time value in ticks (in milliseconds with the default time scale of 1000).
  * @param absolute TRUE if \a time is absolute sequencer time (time since sequencer
  *   creation), FALSE if relative to current time.
@@ -512,6 +427,9 @@ fluid_sequencer_send_at(fluid_sequencer_t *seq, fluid_event_t *evt,
                         unsigned int time, int absolute)
 {
     unsigned int now = fluid_sequencer_get_tick(seq);
+
+    fluid_return_val_if_fail(seq != NULL, FLUID_FAILED);
+    fluid_return_val_if_fail(evt != NULL, FLUID_FAILED);
 
     /* set absolute */
     if(!absolute)
@@ -537,6 +455,8 @@ void
 fluid_sequencer_remove_events(fluid_sequencer_t *seq, fluid_seq_id_t source,
                               fluid_seq_id_t dest, int type)
 {
+    fluid_return_if_fail(seq != NULL);
+
     _fluid_seq_queue_pre_remove(seq, source, dest, type);
 }
 
@@ -553,9 +473,13 @@ fluid_sequencer_remove_events(fluid_sequencer_t *seq, fluid_seq_id_t source,
 unsigned int
 fluid_sequencer_get_tick(fluid_sequencer_t *seq)
 {
-    unsigned int absMs = seq->useSystemTimer ? (int) fluid_curtime() : fluid_atomic_int_get(&seq->currentMs);
+    unsigned int absMs;
     double nowFloat;
     unsigned int now;
+
+    fluid_return_val_if_fail(seq != NULL, 0u);
+
+    absMs = seq->useSystemTimer ? (int) fluid_curtime() : fluid_atomic_int_get(&seq->currentMs);
     nowFloat = ((double)(absMs - seq->startMs)) * seq->scale / 1000.0f;
     now = nowFloat;
     return now;
@@ -573,6 +497,8 @@ fluid_sequencer_get_tick(fluid_sequencer_t *seq)
 void
 fluid_sequencer_set_time_scale(fluid_sequencer_t *seq, double scale)
 {
+    fluid_return_if_fail(seq != NULL);
+
     if(scale <= 0)
     {
         FLUID_LOG(FLUID_WARN, "sequencer: scale <= 0 : %f\n", scale);
@@ -633,6 +559,7 @@ fluid_sequencer_set_time_scale(fluid_sequencer_t *seq, double scale)
 double
 fluid_sequencer_get_time_scale(fluid_sequencer_t *seq)
 {
+    fluid_return_val_if_fail(seq != NULL, 0);
     return seq->scale;
 }
 
@@ -689,7 +616,7 @@ fluid_sequencer_get_time_scale(fluid_sequencer_t *seq)
   All queue data structure management is done in a timer
   callback: '_fluid_seq_queue_process'.  The
   _fluid_seq_queue_process function first process the preQueue,
-  inserting or removing event entrys from the queue, then
+  inserting or removing event entries from the queue, then
   processes the queue, by sending events ready to be sent at the
   current time.
 

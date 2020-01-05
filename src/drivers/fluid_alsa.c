@@ -375,7 +375,7 @@ static int fluid_alsa_handle_write_error(snd_pcm_t *pcm, int errval)
         snd_pcm_wait(pcm, 1);
         break;
 // on some BSD variants ESTRPIPE is defined as EPIPE.
-// not sure why, maybe because this version of alsa doesnt support
+// not sure why, maybe because this version of alsa doesn't support
 // suspending pcm streams. anyway, since EPIPE seems to be more
 // likely than ESTRPIPE, so ifdef it out in case.
 #if ESTRPIPE == EPIPE
@@ -1141,7 +1141,7 @@ new_fluid_alsa_seq_driver(fluid_settings_t *settings,
     }
 
     /* tell the lash server our client id */
-#ifdef LASH_ENABLED
+#ifdef HAVE_LASH
     {
         int enable_lash = 0;
         fluid_settings_getint(settings, "lash.enable", &enable_lash);
@@ -1151,7 +1151,7 @@ new_fluid_alsa_seq_driver(fluid_settings_t *settings,
             fluid_lash_alsa_client_id(fluid_lash_client, snd_seq_client_id(dev->seq_handle));
         }
     }
-#endif /* LASH_ENABLED */
+#endif /* HAVE_LASH */
 
     fluid_atomic_int_set(&dev->should_quit, 0);
 

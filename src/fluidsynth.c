@@ -29,10 +29,17 @@
 #define GETOPT_SUPPORT 1
 #endif
 
+#ifdef LIBINSTPATCH_SUPPORT
+#include <libinstpatch/libinstpatch.h>
+#endif
 #include "fluid_lash.h"
 
 #ifdef SYSTEMD_SUPPORT
 #include <systemd/sd-daemon.h>
+#endif
+
+#if SDL2_SUPPORT
+#include <SDL.h>
 #endif
 
 void print_usage(void);
@@ -324,6 +331,7 @@ int main(int argc, char **argv)
     char buf[512];
     int c, i;
     int interactive = 1;
+    int quiet = 0;
     int midi_in = 1;
     fluid_player_t *player = NULL;
     fluid_midi_router_t *router = NULL;
@@ -339,8 +347,8 @@ int main(int argc, char **argv)
     int audio_channels = 0;
     int dump = 0;
     int fast_render = 0;
-    static const char optchars[] = "a:C:c:dE:f:F:G:g:hijK:L:lm:nO:o:p:R:r:sT:Vvz:";
-#ifdef LASH_ENABLED
+    static const char optchars[] = "a:C:c:dE:f:F:G:g:hijK:L:lm:nO:o:p:qR:r:sT:Vvz:";
+#ifdef HAVE_LASH
     int connect_lash = 1;
     int enabled_lash = 0;		/* set to TRUE if lash gets enabled */
     fluid_lash_args_t *lash_args;
@@ -348,7 +356,19 @@ int main(int argc, char **argv)
     lash_args = fluid_lash_extract_args(&argc, &argv);
 #endif
 
-    print_welcome();
+#if SDL2_SUPPORT
+
+    if(SDL_Init(SDL_INIT_AUDIO) != 0)
+    {
+        fprintf(stderr, "Warning: Unable to initialize SDL2 Audio: %s", SDL_GetError());
+    }
+    else
+    {
+        atexit(SDL_Quit);
+    }
+
+#endif
+
 
     /* create the settings */
     settings = new_fluid_settings();
@@ -385,6 +405,7 @@ int main(int argc, char **argv)
             {"no-shell", 0, 0, 'i'},
             {"option", 1, 0, 'o'},
             {"portname", 1, 0, 'p'},
+            {"quiet", 0, 0, 'q'},
             {"reverb", 1, 0, 'R'},
             {"sample-rate", 1, 0, 'r'},
             {"server", 0, 0, 's'},
@@ -535,6 +556,7 @@ int main(int argc, char **argv)
             break;
 
         case 'h':
+            print_welcome();
             print_help(settings);
             result = 0;
             goto cleanup;
@@ -546,6 +568,7 @@ int main(int argc, char **argv)
 
         case 'j':
             fluid_settings_setint(settings, "audio.jack.autoconnect", 1);
+            fluid_settings_setint(settings, "midi.autoconnect", 1);
             break;
 
         case 'K':
@@ -558,7 +581,7 @@ int main(int argc, char **argv)
             break;
 
         case 'l':			/* disable LASH */
-#ifdef LASH_ENABLED
+#ifdef HAVE_LASH
             connect_lash = 0;
 #endif
             break;
@@ -616,6 +639,19 @@ int main(int argc, char **argv)
             fluid_settings_setstr(settings, "midi.portname", optarg);
             break;
 
+        case 'q':
+            quiet = 1;
+
+#if defined(WIN32)
+            /* Windows logs to stdout by default, so make sure anything
+             * lower than PANIC is not printed either */
+            fluid_set_log_function(FLUID_ERR, NULL, NULL);
+            fluid_set_log_function(FLUID_WARN, NULL, NULL);
+            fluid_set_log_function(FLUID_INFO, NULL, NULL);
+            fluid_set_log_function(FLUID_DBG, NULL, NULL);
+#endif
+            break;
+
         case 'R':
             if((optarg != NULL) && ((FLUID_STRCMP(optarg, "0") == 0) || (FLUID_STRCMP(optarg, "no") == 0)))
             {
@@ -662,6 +698,7 @@ int main(int argc, char **argv)
             break;
 
         case 'V':
+            print_welcome();
             print_configure();
             result = 0;
             goto cleanup;
@@ -702,6 +739,10 @@ int main(int argc, char **argv)
     arg1 = i;
 #endif
 
+    if (!quiet) {
+        print_welcome();
+    }
+
     /* option help requested?  "-o help" */
     if(option_help)
     {
@@ -715,7 +756,7 @@ int main(int argc, char **argv)
     SetPriorityClass(GetCurrentProcess(), REALTIME_PRIORITY_CLASS);
 #endif
 
-#ifdef LASH_ENABLED
+#ifdef HAVE_LASH
 
     /* connect to the lash server */
     if(connect_lash)
@@ -895,17 +936,19 @@ int main(int argc, char **argv)
             fprintf(stderr, "Failed to create the server.\n"
                     "Continuing without it.\n");
         }
+
 #ifdef SYSTEMD_SUPPORT
         else
         {
             sd_notify(0, "READY=1");
         }
+
 #endif
     }
 
 #endif
 
-#ifdef LASH_ENABLED
+#ifdef HAVE_LASH
 
     if(enabled_lash)
     {
@@ -926,7 +969,9 @@ int main(int argc, char **argv)
         }
 
         fluid_settings_dupstr(settings, "audio.file.name", &filename);
-        printf("Rendering audio to file '%s'..\n", filename);
+        if (!quiet) {
+            printf("Rendering audio to file '%s'..\n", filename);
+        }
 
         if(filename)
         {
@@ -1087,7 +1132,7 @@ print_help(fluid_settings_t *settings)
            "    Attempt to connect the jack outputs to the physical ports\n");
     printf(" -K, --midi-channels=[num]\n"
            "    The number of midi channels [default = 16]\n");
-#ifdef LASH_ENABLED
+#ifdef HAVE_LASH
     printf(" -l, --disable-lash\n"
            "    Don't connect to LASH server\n");
 #endif
@@ -1104,6 +1149,9 @@ print_help(fluid_settings_t *settings)
            "    Audio file format for fast rendering or aufile driver (\"help\" for list)\n");
     printf(" -p, --portname=[label]\n"
            "    Set MIDI port name (alsa_seq, coremidi drivers)\n");
+    printf(" -q, --quiet\n"
+           "    Do not print welcome message or other informational output\n"
+           "    (Windows only: also suppress all log messages lower than PANIC\n");
     printf(" -r, --sample-rate\n"
            "    Set the sample rate\n");
     printf(" -R, --reverb\n"
