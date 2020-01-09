@@ -103,6 +103,7 @@ target_compile_options(fluidsynth PRIVATE -std=gnu11
                             PRIVATE -Wall
                             PRIVATE -DHAVE_CONFIG_H
                             PRIVATE -Wno-unused-variable
+                            PRIVATE -Wno-error=format
                             PRIVATE "$<$<CONFIG:DEBUG>:-Werror>") # Only include -Werror when building debug config
 
 # ******* Auto Generated Lookup Tables ******
